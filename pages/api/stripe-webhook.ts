@@ -1,123 +1,146 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
-import { buffer } from 'micro';
-import { supabase } from '../../lib/supabase';
+import crypto from 'crypto';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16',
 });
 
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Generate a random license key
+function generateLicenseKey(): string {
+  return crypto.randomBytes(16).toString('hex').toUpperCase().match(/.{1,4}/g)?.join('-') || '';
+}
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const buf = await buffer(req);
-  const sig = req.headers['stripe-signature']!;
-
-  let event: Stripe.Event;
+  const sig = req.headers['stripe-signature'];
+  let event;
 
   try {
-    event = stripe.webhooks.constructEvent(buf, sig, endpointSecret);
+    const body = JSON.stringify(req.body);
+    event = stripe.webhooks.constructEvent(body, sig!, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
     console.error('Webhook signature verification failed:', err);
     return res.status(400).json({ error: 'Webhook signature verification failed' });
   }
 
-  try {
-    switch (event.type) {
-      case 'checkout.session.completed':
-        const session = event.data.object as Stripe.Checkout.Session;
-        await handleSuccessfulPayment(session);
-        break;
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    
+    try {
+      // Get customer email from the session
+      const customerEmail = session.customer_details?.email;
+      
+      if (!customerEmail) {
+        console.error('No customer email found in session');
+        return res.status(400).json({ error: 'No customer email found' });
+      }
+
+      // Check if user already exists
+      let { data: existingUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', customerEmail)
+        .single();
+
+      let userId;
+
+      if (existingUser) {
+        // User exists, update their payment info
+        userId = existingUser.id;
         
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
+        await supabase
+          .from('users')
+          .update({
+            has_paid: true,
+            stripe_customer_id: session.customer as string,
+            stripe_session_id: session.id,
+            stripe_payment_intent_id: session.payment_intent as string,
+            payment_completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
+      } else {
+        // Create new user account automatically
+        const { data: newUser, error: userError } = await supabase
+          .from('users')
+          .insert({
+            email: customerEmail,
+            has_paid: true,
+            stripe_customer_id: session.customer as string,
+            stripe_session_id: session.id,
+            stripe_payment_intent_id: session.payment_intent as string,
+            payment_completed_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
-    res.status(200).json({ received: true });
-  } catch (error) {
-    console.error('Error processing webhook:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-}
-
-async function handleSuccessfulPayment(session: Stripe.Checkout.Session) {
-  const { user_id, email } = session.metadata || {};
-  
-  if (!user_id || !email) {
-    console.error('Missing metadata in session:', session.id);
-    return;
-  }
-
-  try {
-    // Update user as paid in Supabase
-    const { error } = await supabase
-      .from('users')
-      .update({
-        has_paid: true,
-        stripe_customer_id: session.customer as string,
-        stripe_payment_intent_id: session.payment_intent as string,
-        payment_completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user_id);
-
-    if (error) {
-      console.error('Error updating user payment status:', error);
-      return;
-    }
-
-    // Generate a unique license key for the user
-    const licenseKey = generateLicenseKey();
-    
-    // Store the license key
-    const { error: licenseError } = await supabase
-      .from('license_keys')
-      .insert([
-        {
-          user_id: user_id,
-          license_key: licenseKey,
-          email: email,
-          is_active: true,
-          created_at: new Date().toISOString()
+        if (userError) {
+          console.error('Error creating user:', userError);
+          return res.status(500).json({ error: 'Failed to create user' });
         }
-      ]);
 
-    if (licenseError) {
-      console.error('Error creating license key:', licenseError);
-      return;
+        userId = newUser.id;
+      }
+
+      // Generate and store license key
+      const licenseKey = generateLicenseKey();
+      
+      const { error: licenseError } = await supabase
+        .from('license_keys')
+        .insert({
+          user_id: userId,
+          license_key: licenseKey,
+          email: customerEmail,
+          is_active: true,
+        });
+
+      if (licenseError) {
+        console.error('Error creating license key:', licenseError);
+        return res.status(500).json({ error: 'Failed to create license key' });
+      }
+
+      console.log(`Payment successful for ${customerEmail}, license key: ${licenseKey}`);
+
+      // TODO: Send email with license key here
+      // You can use a service like Resend, SendGrid, or Nodemailer
+      // Example structure:
+      /*
+      await sendWelcomeEmail({
+        to: customerEmail,
+        licenseKey: licenseKey,
+        downloadLink: 'https://your-extension-download-link.com'
+      });
+      */
+
+    } catch (error) {
+      console.error('Error processing webhook:', error);
+      return res.status(500).json({ error: 'Failed to process payment' });
     }
-
-    console.log(`Payment successful for user ${email}, license key: ${licenseKey}`);
-    
-  } catch (error) {
-    console.error('Error in handleSuccessfulPayment:', error);
   }
+
+  res.status(200).json({ received: true });
 }
 
-function generateLicenseKey(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const segments = [];
-  
-  for (let i = 0; i < 4; i++) {
-    let segment = '';
-    for (let j = 0; j < 4; j++) {
-      segment += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    segments.push(segment);
-  }
-  
-  return segments.join('-'); // Format: XXXX-XXXX-XXXX-XXXX
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
 }

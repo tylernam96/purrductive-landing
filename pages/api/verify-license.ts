@@ -1,81 +1,72 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '../../lib/supabase';
+// pages/api/verify-license.ts
+import { NextApiRequest, NextApiResponse } from 'next'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ message: 'Method not allowed' })
   }
 
   try {
-    const { licenseKey, email } = req.body;
+    const { licenseKey, email } = req.body
 
     if (!licenseKey) {
       return res.status(400).json({ 
-        error: 'License key is required',
-        isValid: false 
-      });
+        valid: false, 
+        message: 'License key is required' 
+      })
     }
 
-    // Verify license key in database
-    const { data: license, error } = await supabase
+    // Check if license key exists and is active
+    const { data: licenseData, error } = await supabaseAdmin
       .from('license_keys')
       .select(`
         *,
-        users!inner(email, has_paid)
+        users!inner(
+          email,
+          has_paid,
+          is_early_access
+        )
       `)
       .eq('license_key', licenseKey)
       .eq('is_active', true)
-      .single();
+      .single()
 
-    if (error || !license) {
-      return res.status(400).json({ 
-        error: 'Invalid license key',
-        isValid: false 
-      });
+    if (error || !licenseData) {
+      return res.status(200).json({ 
+        valid: false, 
+        message: 'Invalid or inactive license key' 
+      })
     }
 
-    // Optional: Check if email matches (for additional security)
-    if (email && license.email !== email) {
-      return res.status(400).json({ 
-        error: 'License key does not match email',
-        isValid: false 
-      });
-    }
-
-    // Check if user has actually paid
-    if (!license.users.has_paid) {
-      return res.status(400).json({ 
-        error: 'Payment not confirmed',
-        isValid: false 
-      });
-    }
-
-    // Update last used timestamp
-    await supabase
+    // Update last used timestamp and usage count
+    await supabaseAdmin
       .from('license_keys')
       .update({ 
         last_used_at: new Date().toISOString(),
-        usage_count: license.usage_count + 1 || 1
+        usage_count: licenseData.usage_count + 1
       })
-      .eq('license_key', licenseKey);
+      .eq('id', licenseData.id)
 
-    return res.status(200).json({ 
-      isValid: true,
-      user: {
-        email: license.users.email,
-        licenseKey: license.license_key,
-        activatedAt: license.created_at
-      }
-    });
+    // Check if user has paid or has early access
+    const hasAccess = licenseData.users.has_paid || licenseData.users.is_early_access
+
+    return res.status(200).json({
+      valid: hasAccess,
+      message: hasAccess ? 'License valid' : 'Payment required',
+      userEmail: licenseData.users.email,
+      isPaid: licenseData.users.has_paid,
+      isEarlyAccess: licenseData.users.is_early_access
+    })
 
   } catch (error) {
-    console.error('Error verifying license:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      isValid: false 
-    });
+    console.error('License verification error:', error)
+    res.status(500).json({ 
+      valid: false, 
+      message: 'Internal server error' 
+    })
   }
 }

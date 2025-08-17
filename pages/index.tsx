@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { Check, Star, Clock, TrendingUp, Shield, Zap } from 'lucide-react';
 
 export default function Home() {
@@ -15,7 +16,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: '' }), // Email not required for direct purchase
       });
 
       const { url } = await response.json();
@@ -30,31 +31,6 @@ export default function Home() {
     }
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/collect-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (response.ok) {
-        setMessage('Thanks! We\'ll notify you when Purrductive is ready!');
-        setEmail('');
-      }
-    } catch (error) {
-      setMessage('Something went wrong. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <>
       <Head>
@@ -63,7 +39,6 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
         <script src="https://cdn.tailwindcss.com"></script>
-
       </Head>
 
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -74,10 +49,13 @@ export default function Home() {
               <div className="text-3xl">🐱</div>
               <span className="text-xl font-bold text-white">Purrductive</span>
             </div>
-            <div className="hidden md:flex space-x-8">
+            <div className="hidden md:flex space-x-8 items-center">
               <a href="#features" className="text-gray-300 hover:text-white transition-colors">Features</a>
               <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Pricing</a>
               <a href="#testimonials" className="text-gray-300 hover:text-white transition-colors">Reviews</a>
+              <Link href="/login" className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors border border-white/20">
+                Login
+              </Link>
             </div>
           </div>
         </nav>
@@ -98,23 +76,16 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <form onSubmit={handleEmailSubmit} className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email for early access"
-                  className="px-6 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent backdrop-blur-sm"
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
-                >
-                  {isLoading ? 'Joining...' : 'Get Early Access'}
-                </button>
-              </form>
+              <button
+                onClick={handlePurchase}
+                disabled={isLoading}
+                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
+              >
+                {isLoading ? 'Opening Checkout...' : 'Get Started - $5'}
+              </button>
+              <Link href="/login" className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl border border-white/20 transition-all duration-200">
+                Already have an account?
+              </Link>
             </div>
             
             {message && (
@@ -197,7 +168,7 @@ export default function Home() {
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white mb-4">Purrductive Pro</h3>
                 <div className="mb-6">
-                  <span className="text-5xl font-bold text-white">$12</span>
+                  <span className="text-5xl font-bold text-white">$5</span>
                   <span className="text-gray-300 ml-2">one-time</span>
                 </div>
                 
@@ -221,17 +192,15 @@ export default function Home() {
 
                 <button
                   onClick={handlePurchase}
-                  disabled={isLoading || !email}
+                  disabled={isLoading}
                   className="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
                 >
                   {isLoading ? 'Processing...' : 'Get Purrductive Pro'}
                 </button>
                 
-                {!email && (
-                  <p className="text-gray-400 text-sm mt-3">
-                    Enter your email above first
-                  </p>
-                )}
+                <p className="text-gray-400 text-sm mt-3">
+                  Direct checkout - no account required
+                </p>
               </div>
             </div>
           </div>
