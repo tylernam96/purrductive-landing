@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import Link from 'next/link';
+import Image from 'next/image';
 import { Check, Star, Clock, TrendingUp, Shield, Zap } from 'lucide-react';
 
 export default function Home() {
@@ -16,7 +16,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: '' }), // Email not required for direct purchase
+        body: JSON.stringify({ email }),
       });
 
       const { url } = await response.json();
@@ -28,6 +28,41 @@ export default function Home() {
       setMessage('Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/collect-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        setMessage('Thanks! We\'ll notify you when Purrductive is ready!');
+        setEmail('');
+      }
+    } catch (error) {
+      setMessage('Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const scrollToSection = (elementId: string) => {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      });
     }
   };
 
@@ -45,17 +80,29 @@ export default function Home() {
         {/* Navigation */}
         <nav className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="text-3xl">🐱</div>
+            <div className="flex items-center space-x-3">
+              <Image 
+                src="/cat-happy.png" 
+                alt="Purrductive Logo"
+                width={40}
+                height={40}
+                className="w-10 h-10"
+              />
               <span className="text-xl font-bold text-white">Purrductive</span>
             </div>
-            <div className="hidden md:flex space-x-8 items-center">
-              <a href="#features" className="text-gray-300 hover:text-white transition-colors">Features</a>
-              <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">Pricing</a>
-              <a href="#testimonials" className="text-gray-300 hover:text-white transition-colors">Reviews</a>
-              <Link href="/login" className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors border border-white/20">
-                Login
-              </Link>
+            <div className="hidden md:flex space-x-8">
+              <button 
+                onClick={() => scrollToSection('features')}
+                className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+              >
+                Features
+              </button>
+              <button 
+                onClick={() => scrollToSection('pricing')}
+                className="text-gray-300 hover:text-white transition-colors cursor-pointer"
+              >
+                Pricing
+              </button>
             </div>
           </div>
         </nav>
@@ -63,7 +110,15 @@ export default function Home() {
         {/* Hero Section */}
         <section className="container mx-auto px-6 py-20 text-center">
           <div className="max-w-4xl mx-auto">
-            <div className="text-6xl mb-6 animate-pulse">🐱</div>
+            <div className="mb-6 animate-pulse">
+              <Image 
+                src="/cat-happy.png" 
+                alt="Happy Productivity Cat"
+                width={96}
+                height={96}
+                className="w-24 h-24 mx-auto"
+              />
+            </div>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Turn Your Browser Into a{' '}
               <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
@@ -76,16 +131,23 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <button
-                onClick={handlePurchase}
-                disabled={isLoading}
-                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
-              >
-                {isLoading ? 'Opening Checkout...' : 'Get Started - $5'}
-              </button>
-              <Link href="/login" className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl border border-white/20 transition-all duration-200">
-                Already have an account?
-              </Link>
+              <form onSubmit={handleEmailSubmit} className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email for early access"
+                  className="px-6 py-4 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent backdrop-blur-sm"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
+                >
+                  {isLoading ? 'Joining...' : 'Get Early Access'}
+                </button>
+              </form>
             </div>
             
             {message && (
@@ -120,7 +182,15 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300">
-              <div className="text-4xl mb-4">😸</div>
+              <div className="mb-4">
+                <Image 
+                  src="/cat-happy.png" 
+                  alt="Happy Cat"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 mx-auto"
+                />
+              </div>
               <h3 className="text-xl font-semibold text-white mb-4">Your Virtual Companion</h3>
               <p className="text-gray-300">
                 Watch your productivity cat thrive when you focus and suffer when you're distracted. 
@@ -129,7 +199,7 @@ export default function Home() {
             </div>
 
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300">
-              <Clock className="w-12 h-12 text-blue-400 mb-4" />
+              <Clock className="w-12 h-12 text-blue-400 mb-4 mx-auto" />
               <h3 className="text-xl font-semibold text-white mb-4">Real-Time Tracking</h3>
               <p className="text-gray-300">
                 Automatically categorizes websites as productive or distracting. 
@@ -138,7 +208,7 @@ export default function Home() {
             </div>
 
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-all duration-300">
-              <TrendingUp className="w-12 h-12 text-green-400 mb-4" />
+              <TrendingUp className="w-12 h-12 text-green-400 mb-4 mx-auto" />
               <h3 className="text-xl font-semibold text-white mb-4">Detailed Analytics</h3>
               <p className="text-gray-300">
                 Comprehensive history tracking with charts and insights. 
@@ -192,15 +262,17 @@ export default function Home() {
 
                 <button
                   onClick={handlePurchase}
-                  disabled={isLoading}
+                  disabled={isLoading || !email}
                   className="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 disabled:opacity-50"
                 >
                   {isLoading ? 'Processing...' : 'Get Purrductive Pro'}
                 </button>
                 
-                <p className="text-gray-400 text-sm mt-3">
-                  Direct checkout - no account required
-                </p>
+                {!email && (
+                  <p className="text-gray-400 text-sm mt-3">
+                    Enter your email above first
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -210,7 +282,13 @@ export default function Home() {
         <footer className="container mx-auto px-6 py-12 border-t border-white/10">
           <div className="text-center text-gray-400">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <div className="text-2xl">🐱</div>
+              <Image 
+                src="/cat-happy.png" 
+                alt="Purrductive Cat"
+                width={24}
+                height={24}
+                className="w-6 h-6"
+              />
               <span className="text-lg font-semibold">Purrductive</span>
             </div>
             <p>&copy; 2024 Purrductive. All rights reserved.</p>
